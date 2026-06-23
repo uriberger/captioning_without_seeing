@@ -3,7 +3,7 @@ import os
 from datetime import datetime
 
 from config import Config
-from dataset import iter_crossmodal3600
+from dataset import iter_coco_captions
 from oracle import Oracle
 from blind_model import BlindModel
 
@@ -45,8 +45,8 @@ def run(cfg: Config) -> str:
     print(f"Output dir: {out_dir}")
 
     with open(results_path, "w") as f:
-        for i, sample in enumerate(iter_crossmodal3600(cfg.locale, cfg.max_samples)):
-            print(f"[{i}] image_id={sample['image_id']} locale={sample['locale']}")
+        for i, sample in enumerate(iter_coco_captions(cfg.split, cfg.max_samples)):
+            print(f"[{i}] image_id={sample['image_id']}")
             record = _process_sample(sample, oracle, blind, cfg.n_queries)
             f.write(json.dumps(record) + "\n")
             f.flush()
@@ -90,7 +90,6 @@ def _process_sample(sample: dict, oracle: Oracle, blind: BlindModel, n_queries: 
 
     return {
         "image_id": sample["image_id"],
-        "locale": sample["locale"],
         "reference_captions": sample["captions"],
         "n_queries": n_queries,
         "blind_model": blind.model_name,
