@@ -8,9 +8,39 @@ from oracle import Oracle
 from blind_model import BlindModel
 
 
+def _find_resumable_dir(cfg: Config) -> str | None:
+    """Return an existing output dir whose config matches blind_model, oracle_model, and n_queries."""
+    if not os.path.isdir(cfg.output_dir):
+        return None
+    for name in sorted(os.listdir(cfg.output_dir)):
+        candidate = os.path.join(cfg.output_dir, name)
+        config_path = os.path.join(candidate, "config.json")
+        results_path = os.path.join(candidate, "results.jsonl")
+        if not os.path.isfile(config_path) or not os.path.isfile(results_path):
+            continue
+        with open(config_path) as f:
+            saved = json.load(f)
+        if (
+            saved.get("blind_model") == cfg.blind_model
+            and saved.get("oracle_model") == cfg.oracle_model
+            and saved.get("n_queries") == cfg.n_queries
+        ):
+            return candidate
+    return None
+
+
+def _load_completed_ids(results_path: str) -> set[str]:
+    completed = set()
+    with open(results_path) as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                completed.add(json.loads(line)["image_id"])
+    return completed
+
+
 def _make_output_dir(cfg: Config) -> str:
     blind_short = cfg.blind_model.split("/")[-1]
-    oracle_short = cfg.oracle_model.split("/")[-1]
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     name = f"{timestamp}_{blind_short}_N{cfg.n_queries}"
     path = os.path.join(cfg.output_dir, name)
@@ -21,10 +51,22 @@ def _make_output_dir(cfg: Config) -> str:
 def run(cfg: Config) -> str:
     """
     Run the full experiment. Returns the output directory path.
+    Resumes a previous partial run if one exists with matching blind_model, oracle_model, and n_queries.
     """
-    out_dir = _make_output_dir(cfg)
-    cfg.save(os.path.join(out_dir, "config.json"))
-    results_path = os.path.join(out_dir, "results.jsonl")
+    existing = _find_resumable_dir(cfg)
+    if existing:
+        out_dir = existing
+        results_path = os.path.join(out_dir, "results.jsonl")
+        completed_ids = _load_completed_ids(results_path)
+        print(f"Resuming run: {out_dir} ({len(completed_ids)} samples already done)")
+        file_mode = "a"
+    else:
+        out_dir = _make_output_dir(cfg)
+        cfg.save(os.path.join(out_dir, "config.json"))
+        results_path = os.path.join(out_dir, "results.jsonl")
+        completed_ids = set()
+        print(f"Output dir: {out_dir}")
+        file_mode = "w"
 
     print(f"Loading oracle: {cfg.oracle_model}")
     oracle = Oracle(
@@ -42,10 +84,10 @@ def run(cfg: Config) -> str:
         max_new_tokens_caption=cfg.max_new_tokens_caption,
     )
 
-    print(f"Output dir: {out_dir}")
-
-    with open(results_path, "w") as f:
+    with open(results_path, file_mode) as f:
         for i, sample in enumerate(iter_coco_captions(cfg.split, cfg.max_samples)):
+            if sample["image_id"] in completed_ids:
+                continue
             print(f"[{i}] image_id={sample['image_id']}")
             record = _process_sample(sample, oracle, blind, cfg.n_queries)
             f.write(json.dumps(record) + "\n")
