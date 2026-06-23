@@ -1,0 +1,6 @@
+torch>=2.1.0
+transformers>=4.45.0
+datasets>=2.20.0
+Pillow>=10.0.0
+qwen-vl-utils>=0.0.8
+accelerate>=0.30.0
