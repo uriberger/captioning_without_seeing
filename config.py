@@ -15,8 +15,8 @@ class Config:
     n_queries: int = 5
 
     # Dataset
-    dataset_name: str = "google/crossmodal-3600"
-    locale: Optional[str] = None   # None = all locales; e.g. "en", "zh"
+    dataset_name: str = "Multimodal-Fatima/COCO_captions_validation"
+    split: str = "validation"
     max_samples: Optional[int] = None
 
     # Output
