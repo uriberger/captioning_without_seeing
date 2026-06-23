@@ -1,6 +1,7 @@
 import json
 import os
 from datetime import datetime
+from typing import Optional
 
 from config import Config
 from dataset import iter_coco_captions
@@ -8,7 +9,7 @@ from oracle import Oracle
 from blind_model import BlindModel
 
 
-def _find_resumable_dir(cfg: Config) -> str | None:
+def _find_resumable_dir(cfg: Config) -> Optional[str]:
     """Return an existing output dir whose config matches blind_model, oracle_model, and n_queries."""
     if not os.path.isdir(cfg.output_dir):
         return None
@@ -73,6 +74,7 @@ def run(cfg: Config) -> str:
         cfg.oracle_model,
         thinking=cfg.oracle_thinking,
         max_new_tokens=cfg.max_new_tokens_answer,
+        max_answer_tokens=cfg.max_answer_tokens,
     )
 
     print(f"Loading blind model: {cfg.blind_model}")

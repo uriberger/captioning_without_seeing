@@ -27,6 +27,9 @@ class Config:
     max_new_tokens_answer: int = 2048
     max_new_tokens_caption: int = 512
 
+    # Max tokens in the oracle's visible answer (prompt-enforced; M in the wiki)
+    max_answer_tokens: int = 10
+
     @classmethod
     def from_json(cls, path: str) -> "Config":
         with open(path) as f:

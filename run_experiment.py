@@ -17,6 +17,7 @@ def parse_args():
     parser.add_argument("--locale", type=str)
     parser.add_argument("--max_samples", type=int)
     parser.add_argument("--output_dir", type=str)
+    parser.add_argument("--max_answer_tokens", type=int)
 
     return parser.parse_args()
 
