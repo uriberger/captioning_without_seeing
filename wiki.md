@@ -40,7 +40,7 @@ The **N-vs-quality curve** is expected to be a central empirical result of the p
    - *VLMs may be better*: richer learned associations between visual concepts and language may lead to more informative questions.
    - *LLMs may be better*: stronger general reasoning may lead to better integration of oracle answers into a coherent caption.
 3. **What questioning strategies emerge?** Does the blind model learn to ask about objects first, then attributes, then relations? Does strategy differ between VLMs and LLMs?
-4. **Does performance vary by cultural context?** (Relevant if using CrossModal3600 — see below.)
+4. **Does performance vary by cultural context?** (Relevant if/when switching to CrossModal3600 — see Dataset section.)
 
 ---
 
@@ -59,14 +59,19 @@ Standard n-gram metrics (BLEU, METEOR, CIDEr) may be used as secondary metrics f
 
 ## Dataset
 
-### Candidate: CrossModal3600
+### Current: COCO Captions
 
-**CrossModal3600** is a multilingual, multicultural image captioning dataset with images from 36 locales worldwide. It is a strong candidate because:
-- The **cultural angle** adds an interesting analysis axis: performance may vary by locale (e.g., images of culturally specific food, architecture, or customs may require different questioning strategies).
-- The diversity of content makes it harder to rely on statistical priors, which may make the N=0 baseline weaker and the oracle queries more necessary.
+**COCO Captions** (2014) is the standard benchmark dataset for image captioning. Each of the 5,000 validation images has 5 human-written reference captions, making it well-suited for evaluation with standard metrics.
+
+- Loaded via `Multimodal-Fatima/COCO_captions_{split}` on HuggingFace, which provides all 5 reference captions grouped per image.
+- Streaming mode is used — no full download required.
+
+### Future Candidate: CrossModal3600
+
+**CrossModal3600** remains a longer-term candidate for its cultural diversity angle (36 locales). It was removed from HuggingFace; the original source is the Google Research Datasets repo. Reasons it is still worth pursuing:
+- Performance variation by locale is an interesting analysis axis.
+- Content diversity makes the N=0 baseline weaker, making oracle queries more clearly necessary.
 - Pairs well with Polos (reference-free evaluation handles cross-cultural content better).
-
-No final dataset decision has been made yet.
 
 ---
 
