@@ -46,14 +46,145 @@ The **N-vs-quality curve** is expected to be a central empirical result of the p
 
 ## Evaluation
 
-### Metric: Polos
+### Metrics
 
-The primary metric is **Polos**, a CLIP-based reference-free captioning metric. It is well-suited for this project because:
+**Polos** is the primary metric — a learned, CLIP-based reference-free captioning metric (CVPR 2024). It is well-suited for this project because:
 - It does not require many reference captions per image (unlike CIDEr/BLEU).
 - It handles culturally diverse content better than n-gram metrics.
 - It measures alignment with the actual image, not just lexical overlap with references.
 
-Standard n-gram metrics (BLEU, METEOR, CIDEr) may be used as secondary metrics for comparability with prior work.
+**CLIPScore** is used as a secondary metric. It measures cosine similarity between image and caption embeddings in CLIP space (ViT-B/16), with no reference captions needed. It provides a simpler, interpretable baseline for image-text alignment.
+
+Standard n-gram metrics (BLEU, METEOR, CIDEr) may be used as additional secondary metrics for comparability with prior work.
+
+### Running Evaluation
+
+```bash
+source venv/bin/activate
+python evaluate.py
+```
+
+This discovers all directories under `outputs/`, computes Polos and CLIPScore for each, prints a summary table, and writes per-sample scores to `eval_scores.jsonl` inside each output directory.
+
+### Environment Architecture
+
+Polos has deep dependency conflicts with the main project environment (it requires `pytorch-lightning==1.3.8` and `fairseq==0.12.2`, both of which are incompatible with modern torch/torchmetrics). The solution is two separate virtual environments:
+
+- **`venv/`** — main environment for running experiments and computing CLIPScore.
+- **`venv_polos/`** — isolated environment for Polos only. Called as a subprocess by `evaluate.py` via `score_polos.py`.
+
+### Environment Setup from Scratch
+
+#### Prerequisites
+
+- Python 3.9 (the project path is `/cm/local/apps/python3/bin/python3`)
+- The `Polos` repo must be cloned at the project root: `git clone https://github.com/YuigaWada/Polos.git`
+
+#### 1. Main environment (`venv/`)
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+pip install "torchmetrics[multimodal]"
+```
+
+`requirements.txt` covers torch, transformers, datasets, Pillow, qwen-vl-utils, and accelerate. The `torchmetrics[multimodal]` line adds CLIPScore support.
+
+#### 2. Polos environment (`venv_polos/`)
+
+This environment requires careful pinning due to cascading compatibility issues across pytorch-lightning, fairseq, and their transitive dependencies.
+
+```bash
+python3 -m venv venv_polos
+source venv_polos/bin/activate
+
+# PyTorch — CPU build is sufficient (Polos inference is fast)
+pip install "torch==2.1.2" "torchvision==0.16.2" \
+    --index-url https://download.pytorch.org/whl/cpu
+
+# Old pytorch-lightning stack with exact compatible versions
+pip install \
+    "pytorch-lightning==1.3.8" \
+    "PyYAML==5.3.1" \
+    "pyDeprecate==0.3.0" \
+    "torchmetrics==0.5.1" \
+    "tensorboard" \
+    "numpy<2" \
+    "tqdm==4.65.0"
+
+# fairseq and its transitive dependencies
+pip install \
+    "omegaconf==2.0.6" \
+    "hydra-core==1.0.7" \
+    "antlr4-python3-runtime==4.8" \
+    "sacrebleu<2.0" \
+    "portalocker" \
+    "bitarray"
+pip install --no-deps "fairseq==0.12.2"
+
+# Remaining Polos dependencies
+pip install \
+    "transformers==4.30.0" \
+    "pytorch-nlp==0.5.0" \
+    "click" \
+    "pandas" \
+    "scipy" \
+    "sentencepiece" \
+    "ftfy"
+
+# Install Polos itself (no deps — all handled above)
+pip install --no-deps -e Polos/
+```
+
+#### 3. Patches required in `venv_polos/`
+
+Three files must be patched after installation. These patches are already applied to the current environment; only needed when rebuilding from scratch.
+
+**Patch A — `venv_polos/lib/python3.9/site-packages/pytorch_lightning/metrics/__init__.py`**
+
+Replace the entire file with an empty stub. The `metrics` shim in pytorch-lightning 1.3.8 imports old torchmetrics APIs that are broken with numpy 2 and modern tqdm. Polos only uses `LightningModule.load_from_checkpoint`, not these metric classes.
+
+```python
+# Stubbed out — original imports are incompatible with modern torchmetrics/numpy.
+# Polos only needs LightningModule.load_from_checkpoint, not these metric classes.
+```
+
+**Patch B — `venv_polos/lib/python3.9/site-packages/torchmetrics/functional/text/bert.py`**
+
+Add `import tqdm.auto` after `import tqdm` (around line 31). Without this, the `tqdm.auto.tqdm` type annotation on the `_get_progress_bar` function causes an `AttributeError` at import time.
+
+```python
+if _TQDM_AVAILABLE:
+    import tqdm
+    import tqdm.auto    # ← add this line
+```
+
+**Patch C — `Polos/polos/models/model_base.py`**
+
+In `ModelBase.__init__` (around line 154), change `self.hparams = ...` to `self._hparams = ...`. In PyTorch 2.x, `hparams` is a read-only property on `nn.Module` and cannot be set via direct attribute assignment.
+
+```python
+# Before:
+self.hparams = Namespace(**hparams)
+# ...
+self.hparams = hparams
+
+# After:
+self._hparams = Namespace(**hparams)
+# ...
+self._hparams = hparams
+```
+
+**Patch D — `Polos/polos/models/__init__.py`**
+
+Add `strict=False` to both `load_from_checkpoint` calls. The saved Polos checkpoint predates a `position_ids` buffer added in newer transformers versions; without `strict=False`, loading fails with a missing-key error.
+
+```python
+model = str2model[...].load_from_checkpoint(
+    checkpoint, hparams=hparams, strict=False    # ← add strict=False
+)
+```
 
 ---
 

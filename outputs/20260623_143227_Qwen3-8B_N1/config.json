@@ -1,0 +1,15 @@
+{
+  "oracle_model": "Qwen/Qwen3-VL-32B-Instruct",
+  "blind_model": "Qwen/Qwen3-8B",
+  "oracle_thinking": true,
+  "blind_thinking": false,
+  "n_queries": 1,
+  "dataset_name": "Multimodal-Fatima/COCO_captions_validation",
+  "split": "validation",
+  "max_samples": 50,
+  "output_dir": "outputs",
+  "max_new_tokens_question": 1024,
+  "max_new_tokens_answer": 2048,
+  "max_new_tokens_caption": 512,
+  "max_answer_tokens": 10
+}
