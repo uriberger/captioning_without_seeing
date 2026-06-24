@@ -78,7 +78,10 @@ Polos has deep dependency conflicts with the main project environment (it requir
 #### Prerequisites
 
 - Python 3.9 (the project path is `/cm/local/apps/python3/bin/python3`)
-- The `Polos` repo must be cloned at the project root: `git clone https://github.com/YuigaWada/Polos.git`
+- The `Polos` repo is a git submodule. After cloning this repo, initialise it with:
+  ```bash
+  git submodule update --init
+  ```
 
 #### 1. Main environment (`venv/`)
 
