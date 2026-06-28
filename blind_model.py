@@ -1,6 +1,6 @@
 import re
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModelForVision2Seq
 
 
 def _strip_thinking(text: str) -> str:
@@ -33,12 +33,11 @@ class BlindModel:
         self.max_new_tokens_caption = max_new_tokens_caption
 
         self.tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
-        self.model = AutoModelForCausalLM.from_pretrained(
-            model_name,
-            dtype=torch.bfloat16,
-            device_map="auto",
-            trust_remote_code=True,
-        )
+        _load_kwargs = dict(torch_dtype=torch.bfloat16, device_map="auto", trust_remote_code=True)
+        try:
+            self.model = AutoModelForCausalLM.from_pretrained(model_name, **_load_kwargs)
+        except ValueError:
+            self.model = AutoModelForVision2Seq.from_pretrained(model_name, **_load_kwargs)
         self.model.eval()
 
         self._system_prompt = _build_system_prompt(n_queries)
