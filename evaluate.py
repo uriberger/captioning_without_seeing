@@ -114,6 +114,24 @@ def _compute_polos(records: list, images: dict) -> list:
         return json.loads(result.stdout.strip())
 
 
+def _load_cached_scores(exp_dir: str, expected_count: int) -> tuple[list, list] | None:
+    """Return (clip_scores, polos_scores) from eval_scores.jsonl if complete, else None."""
+    scores_path = os.path.join(exp_dir, "eval_scores.jsonl")
+    if not os.path.isfile(scores_path):
+        return None
+    rows = []
+    with open(scores_path) as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                rows.append(json.loads(line))
+    if len(rows) != expected_count:
+        return None
+    clip_scores = [r["clip_score"] for r in rows]
+    polos_scores = [r["polos"] for r in rows]
+    return clip_scores, polos_scores
+
+
 def main():
     exp_dirs = _discover_experiments(OUTPUTS_DIR)
     if not exp_dirs:
@@ -125,37 +143,60 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Device: {device}")
 
-    # Collect all records and image IDs across experiments
+    # Collect all records; determine which experiments need scoring
     all_experiments = []
-    all_image_ids = set()
+    needs_scoring_image_ids = set()
     for exp_dir in exp_dirs:
         cfg, records = _load_experiment(exp_dir)
-        all_experiments.append((exp_dir, cfg, records))
-        for rec in records:
-            all_image_ids.add(rec["image_id"])
+        cached = _load_cached_scores(exp_dir, len(records))
+        all_experiments.append((exp_dir, cfg, records, cached))
+        if cached is None:
+            for rec in records:
+                needs_scoring_image_ids.add(rec["image_id"])
 
-    split = all_experiments[0][1].get("split", "validation")
-    print(f"Loading {len(all_image_ids)} images from COCO {split} split...")
-    images = _build_image_lookup(all_image_ids, split)
-    print(f"Loaded {len(images)} images.\n")
+    n_cached = sum(1 for _, _, _, c in all_experiments if c is not None)
+    n_fresh = len(all_experiments) - n_cached
+    print(f"Cached: {n_cached}  |  To evaluate: {n_fresh}\n")
+
+    images = {}
+    if needs_scoring_image_ids:
+        split = all_experiments[0][1].get("split", "validation")
+        print(f"Loading {len(needs_scoring_image_ids)} images from COCO {split} split...")
+        images = _build_image_lookup(needs_scoring_image_ids, split)
+        print(f"Loaded {len(images)} images.\n")
 
     results_summary = []
-    for exp_dir, cfg, records in all_experiments:
+    for exp_dir, cfg, records, cached in all_experiments:
         blind = cfg.get("blind_model", "?").split("/")[-1]
         oracle = cfg.get("oracle_model", "?").split("/")[-1]
         n = cfg.get("n_queries", "?")
         n_samples = len(records)
+        scores_path = os.path.join(exp_dir, "eval_scores.jsonl")
 
-        print(f"Evaluating: {os.path.basename(exp_dir)}  ({n_samples} samples)")
+        if cached is not None:
+            clip_scores, polos_scores = cached
+            print(f"Cached:    {os.path.basename(exp_dir)}  ({n_samples} samples)")
+        else:
+            print(f"Evaluating: {os.path.basename(exp_dir)}  ({n_samples} samples)")
 
-        clip_scores = _compute_clipscore(records, images, device)
-        print(f"  CLIPScore done.")
+            clip_scores = _compute_clipscore(records, images, device)
+            print(f"  CLIPScore done.")
 
-        polos_scores = _compute_polos(records, images)
-        print(f"  Polos done.")
+            polos_scores = _compute_polos(records, images)
+            print(f"  Polos done.")
+
+            with open(scores_path, "w") as f:
+                for rec, cs, ps in zip(records, clip_scores, polos_scores):
+                    f.write(json.dumps({
+                        "image_id": rec["image_id"],
+                        "clip_score": cs,
+                        "polos": ps,
+                    }) + "\n")
+            print(f"  Per-sample scores → {scores_path}")
 
         avg_clip = sum(clip_scores) / len(clip_scores)
         avg_polos = sum(polos_scores) / len(polos_scores)
+        print(f"  CLIPScore: {avg_clip:.4f}  |  Polos: {avg_polos:.4f}\n")
 
         results_summary.append({
             "dir": os.path.basename(exp_dir),
@@ -166,18 +207,6 @@ def main():
             "clip_score": avg_clip,
             "polos": avg_polos,
         })
-
-        scores_path = os.path.join(exp_dir, "eval_scores.jsonl")
-        with open(scores_path, "w") as f:
-            for rec, cs, ps in zip(records, clip_scores, polos_scores):
-                f.write(json.dumps({
-                    "image_id": rec["image_id"],
-                    "clip_score": cs,
-                    "polos": ps,
-                }) + "\n")
-
-        print(f"  CLIPScore: {avg_clip:.4f}  |  Polos: {avg_polos:.4f}")
-        print(f"  Per-sample scores → {scores_path}\n")
 
     # Summary table
     print("=" * 72)
