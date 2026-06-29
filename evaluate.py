@@ -114,7 +114,7 @@ def _compute_polos(records: list, images: dict) -> list:
         return json.loads(result.stdout.strip())
 
 
-def _load_cached_scores(exp_dir: str, expected_count: int) -> tuple[list, list] | None:
+def _load_cached_scores(exp_dir: str, expected_count: int) -> "tuple[list, list] | None":
     """Return (clip_scores, polos_scores) from eval_scores.jsonl if complete, else None."""
     scores_path = os.path.join(exp_dir, "eval_scores.jsonl")
     if not os.path.isfile(scores_path):
